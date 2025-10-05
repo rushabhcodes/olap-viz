@@ -1,0 +1,8 @@
+{
+  "records": [
+    { "ticker": "AAPL", "market": "NASDAQ", "quarter": "Q1", "revenue_m": 89.6, "eps": 1.24 },
+    { "ticker": "GOOGL", "market": "NASDAQ", "quarter": "Q1", "revenue_m": 76.0, "eps": 0.98 },
+    { "ticker": "MSFT", "market": "NASDAQ", "quarter": "Q1", "revenue_m": 61.3, "eps": 1.08 },
+    { "ticker": "AAPL", "market": "NASDAQ", "quarter": "Q2", "revenue_m": 90.1, "eps": 1.30 }
+  ]
+}

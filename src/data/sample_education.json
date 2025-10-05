@@ -1,0 +1,8 @@
+{
+  "records": [
+    { "student": "Alice", "course": "Math101", "semester": "Fall2025", "grade": 88, "credits": 3 },
+    { "student": "Bob", "course": "Hist200", "semester": "Fall2025", "grade": 92, "credits": 3 },
+    { "student": "Carol", "course": "Math101", "semester": "Spring2025", "grade": 79, "credits": 3 },
+    { "student": "Dave", "course": "CS50", "semester": "Fall2025", "grade": 95, "credits": 4 }
+  ]
+}

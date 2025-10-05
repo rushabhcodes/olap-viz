@@ -1,14 +1,7 @@
-export interface DataRecord {
-  product: string;
-  region: string;
-  quarter: string;
-  sales: number;
-  units: number;
-  category?: string;
-  month?: string;
-}
+export type DataRecord = Record<string, any>;
 
 export interface CubeData {
+  // Generic list of records. Each record is a map from column name to value.
   records: DataRecord[];
 }
 
@@ -31,6 +24,8 @@ export interface CubeCell {
 export type OperationType = 'slice' | 'dice' | 'drill-down' | 'drill-up' | 'pivot';
 
 export interface SliceParams {
+  // The logical dimension name used by the UI: 'product'|'region'|'quarter'.
+  // These map to actual dataset column names inside the app via the inferred mapping.
   dimension: 'product' | 'region' | 'quarter';
   value: string;
 }
@@ -54,7 +49,10 @@ export interface PivotParams {
 }
 
 export interface DimensionMapping {
-  x: 'product' | 'region' | 'quarter';
-  y: 'product' | 'region' | 'quarter';
-  z: 'product' | 'region' | 'quarter';
+  // Map the 3 cube axes to actual dataset column names (string keys).
+  x: string;
+  y: string;
+  z: string;
+  // optional measure column name (e.g. 'sales')
+  measure?: string;
 }

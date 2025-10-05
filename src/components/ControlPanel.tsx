@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Slice, Grid3x3, TrendingDown, TrendingUp, RotateCw, Upload, Download } from 'lucide-react';
 import { SliceParams, DiceParams, OperationType, DimensionMapping } from '../types/olap';
 
@@ -17,6 +17,14 @@ interface ControlPanelProps {
     quarters: string[];
   };
   currentMapping: DimensionMapping;
+  // optional list of all column keys in the dataset for custom mapping
+  allColumns?: string[];
+  autoRotate?: boolean;
+  rotateSpeed?: number;
+  onToggleRotate?: (enabled: boolean) => void;
+  onSetRotateSpeed?: (speed: number) => void;
+  samples?: { id: string; name: string }[];
+  onLoadSample?: (id: string) => void;
 }
 
 export default function ControlPanel({
@@ -29,8 +37,16 @@ export default function ControlPanel({
   onExport,
   onReset,
   dimensions,
-  currentMapping
+  currentMapping,
+  allColumns,
+  autoRotate = false,
+  rotateSpeed = 0.002,
+  onToggleRotate,
+  onSetRotateSpeed,
+  samples,
+  onLoadSample
 }: ControlPanelProps) {
+  const [selectedSample, setSelectedSample] = useState<string>('');
   const [activeOperation, setActiveOperation] = useState<OperationType | null>(null);
   const [sliceDimension, setSliceDimension] = useState<'product' | 'region' | 'quarter'>('product');
   const [sliceValue, setSliceValue] = useState<string>('');
@@ -40,8 +56,20 @@ export default function ControlPanel({
   const [selectedQuarters, setSelectedQuarters] = useState<string[]>([]);
 
   const [drillDimension, setDrillDimension] = useState<'product' | 'region' | 'quarter'>('quarter');
-  const [pivotAxis1, setPivotAxis1] = useState<'product' | 'region' | 'quarter'>('product');
-  const [pivotAxis2, setPivotAxis2] = useState<'product' | 'region' | 'quarter'>('region');
+  const [customX, setCustomX] = useState<string>('product');
+  const [customY, setCustomY] = useState<string>('region');
+  const [customZ, setCustomZ] = useState<string>('quarter');
+  const [customMeasure, setCustomMeasure] = useState<string>('sales');
+
+  // sync custom mapping when currentMapping prop changes
+  useEffect(() => {
+    if (currentMapping) {
+      setCustomX((currentMapping as any).x || 'product');
+      setCustomY((currentMapping as any).y || 'region');
+      setCustomZ((currentMapping as any).z || 'quarter');
+      setCustomMeasure((currentMapping as any).measure || 'sales');
+    }
+  }, [currentMapping]);
 
   const handleSlice = () => {
     if (sliceValue) {
@@ -61,15 +89,18 @@ export default function ControlPanel({
   };
 
   const handlePivot = () => {
+    // prefer custom mapping if available
+    if (allColumns && allColumns.length > 0) {
+      onPivot({ x: customX, y: customY, z: customZ, measure: customMeasure });
+      return;
+    }
+
+    // fallback: map logical axes to current selections
     const remainingDim = (['product', 'region', 'quarter'] as const).find(
-      d => d !== pivotAxis1 && d !== pivotAxis2
+      d => d !== (customX as any) && d !== (customY as any)
     );
     if (remainingDim) {
-      onPivot({
-        x: pivotAxis1,
-        y: pivotAxis2,
-        z: remainingDim
-      });
+      onPivot({ x: 'product', y: 'region', z: remainingDim });
     }
   };
 
@@ -339,35 +370,54 @@ export default function ControlPanel({
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">X-Axis</label>
               <select
-                value={pivotAxis1}
-                onChange={(e) => setPivotAxis1(e.target.value as 'product' | 'region' | 'quarter')}
+                value={customX}
+                onChange={(e) => setCustomX(e.target.value)}
                 className="w-full p-2 text-sm border border-gray-300 rounded-lg"
               >
-                <option value="product">Product</option>
-                <option value="region">Region</option>
-                <option value="quarter">Quarter</option>
+                {allColumns && allColumns.length > 0 ? (
+                  (allColumns as string[]).map((c: string) => <option key={c} value={c}>{c}</option>)
+                ) : (
+                  <>
+                    <option value="product">Product</option>
+                    <option value="region">Region</option>
+                    <option value="quarter">Quarter</option>
+                  </>
+                )}
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Y-Axis</label>
               <select
-                value={pivotAxis2}
-                onChange={(e) => setPivotAxis2(e.target.value as 'product' | 'region' | 'quarter')}
+                value={customY}
+                onChange={(e) => setCustomY(e.target.value)}
                 className="w-full p-2 text-sm border border-gray-300 rounded-lg"
               >
-                <option value="product">Product</option>
-                <option value="region">Region</option>
-                <option value="quarter">Quarter</option>
+                {allColumns && allColumns.length > 0 ? (
+                  (allColumns as string[]).map((c: string) => <option key={c} value={c}>{c}</option>)
+                ) : (
+                  <>
+                    <option value="product">Product</option>
+                    <option value="region">Region</option>
+                    <option value="quarter">Quarter</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Measure (numeric)</label>
+              <select value={customMeasure} onChange={(e) => setCustomMeasure(e.target.value)} className="w-full p-2 text-sm border border-gray-300 rounded-lg">
+                {allColumns && allColumns.length > 0 ? allColumns.map(c => <option key={c} value={c}>{c}</option>) : <option value="sales">sales</option>}
               </select>
             </div>
 
             <button
               onClick={handlePivot}
-              disabled={pivotAxis1 === pivotAxis2}
+              disabled={customX === customY || customX === customZ || customY === customZ}
               className="w-full bg-yellow-600 text-white py-2 text-sm rounded-lg hover:bg-yellow-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
-              Apply Pivot
+              Apply Pivot / Mapping
             </button>
           </div>
         )}
@@ -386,6 +436,16 @@ export default function ControlPanel({
               className="hidden"
             />
           </label>
+
+          {samples && samples.length > 0 && (
+            <div className="flex items-center gap-2">
+              <select className="flex-1 p-2 border border-gray-300 rounded" value={selectedSample} onChange={(e) => setSelectedSample(e.target.value)}>
+                <option value="">Select a sample</option>
+                {samples.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <button className="p-2 bg-indigo-600 text-white rounded" onClick={() => selectedSample && onLoadSample?.(selectedSample)}>Load</button>
+            </div>
+          )}
 
           <div className="flex gap-2">
             <button
@@ -431,6 +491,18 @@ export default function ControlPanel({
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-red-400 rounded"></div>
             <span>Higher Sales</span>
+          </div>
+        </div>
+      </div>
+      <div className="border-t pt-3">
+        <h3 className="font-semibold text-gray-800 text-sm mb-2">View</h3>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={autoRotate} onChange={(e) => onToggleRotate?.(e.target.checked)} />
+            <span className="text-sm">Auto Rotate</span>
+          </label>
+          <div className="flex-1">
+            <input type="range" min="0" max="0.02" step="0.001" value={rotateSpeed} onChange={(e) => onSetRotateSpeed?.(Number(e.target.value))} />
           </div>
         </div>
       </div>

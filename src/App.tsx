@@ -1,8 +1,16 @@
 import { useState, useEffect } from 'react';
 import OLAPCube from './components/OLAPCube';
 import ControlPanel from './components/ControlPanel';
-import { CubeData, SliceParams, DiceParams, DimensionMapping } from './types/olap';
+import { CubeData, SliceParams, DiceParams } from './types/olap';
 import { sampleSalesData } from './data/sampleData';
+import sampleSalesV1 from './data/sample_sales_v1.csv?raw';
+import sampleCustomCsv from './data/sample_sales_custom_cols.csv?raw';
+import sampleV2 from './data/sample_sales_v2.json';
+import samplePeople from './data/sample_people_sales.json';
+import sampleHealthcare from './data/sample_healthcare.csv?raw';
+import sampleIoT from './data/sample_iot_sensors.csv?raw';
+import sampleEducation from './data/sample_education.json';
+import sampleFinance from './data/sample_finance.json';
 import {
   sliceData,
   diceData,
@@ -11,7 +19,8 @@ import {
   drillUp,
   exportToCSV,
   exportToJSON,
-  parseCSV
+  parseCSV,
+  normalizeToOLAP
 } from './utils/cubeUtils';
 import { Box } from 'lucide-react';
 
@@ -20,13 +29,18 @@ function App() {
   const [currentData, setCurrentData] = useState<CubeData>(sampleSalesData);
   const [animationProgress, setAnimationProgress] = useState(0);
   const [currentOperation, setCurrentOperation] = useState<string>('');
-  const [dimensionMapping, setDimensionMapping] = useState<DimensionMapping>({
+  // dimensionMapping maps cube axes to actual dataset keys
+  const [dimensionMapping, setDimensionMapping] = useState<any>({
     x: 'product',
     y: 'region',
-    z: 'quarter'
+    z: 'quarter',
+    measure: 'sales'
   });
 
   const dimensions = getDimensions(baseData);
+  const allColumns = Array.from(new Set(baseData.records.flatMap(r => Object.keys(r))));
+  const [autoRotate, setAutoRotate] = useState(false);
+  const [rotateSpeed, setRotateSpeed] = useState(0.002);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -76,10 +90,12 @@ function App() {
     setCurrentOperation(`Drill Up: ${dimension}`);
   };
 
-  const handlePivot = (mapping: DimensionMapping) => {
+  const handlePivot = (mapping: { x: string; y: string; z: string }) => {
     setAnimationProgress(0);
-    setDimensionMapping(mapping);
-    setCurrentOperation(`Pivot: X=${mapping.x}, Y=${mapping.y}, Z=${mapping.z}`);
+    // if mapping includes measure keep it, otherwise keep existing measure key
+    const measure = (mapping as any).measure || dimensionMapping.measure || 'sales';
+    setDimensionMapping({ x: mapping.x, y: mapping.y, z: mapping.z, measure });
+    setCurrentOperation(`Pivot: X=${mapping.x}, Y=${mapping.y}, Z=${mapping.z} (measure: ${measure})`);
   };
 
   const handleUpload = async (file: File) => {
@@ -98,12 +114,48 @@ function App() {
     }
 
     if (data && data.records && data.records.length > 0) {
+      // Normalize dataset to the expected OLAP shape and infer mapping
+      const normalized = normalizeToOLAP(data);
       setAnimationProgress(0);
-      setBaseData(data);
-      setCurrentData(data);
-      setCurrentOperation('Custom dataset loaded');
+      setBaseData(normalized.data);
+      setCurrentData(normalized.data);
+      setDimensionMapping({ x: 'product', y: 'region', z: 'quarter', measure: 'sales' });
+      setCurrentOperation(`Custom dataset loaded (inferred measure: ${normalized.mapping.measure})`);
     } else {
       alert('Invalid data format');
+    }
+  };
+
+  const samples: { id: string; name: string; raw?: string; data?: any }[] = [
+    { id: 'sales_v1', name: 'Sales V1 (canonical CSV)', raw: sampleSalesV1 },
+    { id: 'custom_csv', name: 'Sales Custom Columns (CSV)', raw: sampleCustomCsv },
+    { id: 'sales_v2', name: 'Sales V2 (JSON)', data: sampleV2 },
+    { id: 'people', name: 'People Sales (JSON)', data: samplePeople },
+    { id: 'healthcare', name: 'Healthcare (CSV)', raw: sampleHealthcare },
+    { id: 'iot', name: 'IoT Sensors (CSV)', raw: sampleIoT },
+    { id: 'education', name: 'Education (JSON)', data: sampleEducation },
+    { id: 'finance', name: 'Finance (JSON)', data: sampleFinance }
+  ];
+
+  const loadSample = async (id: string) => {
+    const s = samples.find(x => x.id === id);
+    if (!s) return;
+    let data: any = null;
+    if (s.data) {
+      // data is already parsed JSON
+      data = s.data;
+    } else if (s.raw) {
+      // raw CSV string
+      data = parseCSV(s.raw);
+    }
+
+    if (data && data.records && data.records.length > 0) {
+      const normalized = normalizeToOLAP(data);
+      setAnimationProgress(0);
+      setBaseData(normalized.data);
+      setCurrentData(normalized.data);
+      setDimensionMapping({ x: 'product', y: 'region', z: 'quarter', measure: 'sales' });
+      setCurrentOperation(`Loaded sample: ${s.name}`);
     }
   };
 
@@ -159,6 +211,9 @@ function App() {
               data={currentData}
               animationProgress={animationProgress}
               dimensionMapping={dimensionMapping}
+              // disable auto-rotation by default; users can enable via props/UI later
+              autoRotate={autoRotate}
+              rotateSpeed={rotateSpeed}
             />
           </div>
 
@@ -177,6 +232,13 @@ function App() {
               quarters: dimensions.quarters.values
             }}
             currentMapping={dimensionMapping}
+            allColumns={allColumns}
+            autoRotate={autoRotate}
+            rotateSpeed={rotateSpeed}
+            onToggleRotate={(v) => setAutoRotate(v)}
+            onSetRotateSpeed={(s) => setRotateSpeed(s)}
+            samples={samples}
+            onLoadSample={loadSample}
           />
         </div>
 

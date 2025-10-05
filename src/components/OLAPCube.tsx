@@ -2,21 +2,23 @@ import { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
-import { CubeData, CubeCell, DimensionMapping } from '../types/olap';
-import { generateCubeCells, generateCubeCellsWithMapping, getDimensions, getMaxValue } from '../utils/cubeUtils';
+import { CubeData, CubeCell } from '../types/olap';
+import { generateCubeCells, generateCubeCellsWithMapping, getDimensions, getMaxValue, getDimensionsForMapping } from '../utils/cubeUtils';
 
 interface CubeMeshProps {
   cells: CubeCell[];
   maxValue: number;
   animationProgress: number;
+  autoRotate?: boolean;
+  rotateSpeed?: number;
 }
 
-function CubeMesh({ cells, maxValue, animationProgress }: CubeMeshProps) {
+function CubeMesh({ cells, maxValue, animationProgress, autoRotate = false, rotateSpeed = 0.002 }: CubeMeshProps) {
   const groupRef = useRef<THREE.Group>(null);
 
   useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y += 0.002;
+    if (groupRef.current && autoRotate) {
+      groupRef.current.rotation.y += rotateSpeed;
     }
   });
 
@@ -136,18 +138,31 @@ function AxisLabels({ dimensions }: AxisLabelsProps) {
 interface OLAPCubeProps {
   data: CubeData;
   animationProgress?: number;
-  dimensionMapping?: DimensionMapping;
+  // mapping maps the logical axes to dataset keys (x/y/z) and optionally a measure
+  dimensionMapping?: { x: string; y: string; z: string; measure?: string };
+  autoRotate?: boolean;
+  rotateSpeed?: number;
 }
 
-export default function OLAPCube({ data, animationProgress = 1, dimensionMapping }: OLAPCubeProps) {
+export default function OLAPCube({ data, animationProgress = 1, dimensionMapping, autoRotate = false, rotateSpeed = 0.002 }: OLAPCubeProps) {
   const cells = useMemo(() => {
     if (dimensionMapping) {
-      return generateCubeCellsWithMapping(data, dimensionMapping);
+      return generateCubeCellsWithMapping(data, dimensionMapping as any);
     }
     return generateCubeCells(data);
   }, [data, dimensionMapping]);
   const maxValue = useMemo(() => getMaxValue(data), [data]);
-  const dimensions = useMemo(() => getDimensions(data), [data]);
+  const dimensions = useMemo(() => {
+    if (dimensionMapping) {
+      const mapped = getDimensionsForMapping(data, dimensionMapping as any);
+      return {
+        products: { name: mapped.x.name, values: mapped.x.values },
+        regions: { name: mapped.y.name, values: mapped.y.values },
+        quarters: { name: mapped.z.name, values: mapped.z.values }
+      };
+    }
+    return getDimensions(data);
+  }, [data, dimensionMapping]);
 
   return (
     <div className="w-full h-full">
@@ -156,7 +171,7 @@ export default function OLAPCube({ data, animationProgress = 1, dimensionMapping
         <pointLight position={[10, 10, 10]} intensity={0.8} />
         <pointLight position={[-10, -10, -10]} intensity={0.4} />
 
-        <CubeMesh cells={cells} maxValue={maxValue} animationProgress={animationProgress} />
+  <CubeMesh cells={cells} maxValue={maxValue} animationProgress={animationProgress} autoRotate={autoRotate} rotateSpeed={rotateSpeed} />
         <AxisLabels dimensions={dimensions} />
 
         <OrbitControls

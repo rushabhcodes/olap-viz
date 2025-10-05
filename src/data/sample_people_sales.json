@@ -1,0 +1,6 @@
+[
+  { "itemName": "Chair", "state": "CA", "period": "Q1", "price": 120, "qty": 5 },
+  { "itemName": "Table", "state": "CA", "period": "Q2", "price": 300, "qty": 2 },
+  { "itemName": "Lamp", "state": "NY", "period": "Q1", "price": 45, "qty": 10 },
+  { "itemName": "Chair", "state": "NY", "period": "Q2", "price": 130, "qty": 7 }
+]

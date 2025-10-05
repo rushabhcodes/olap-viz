@@ -1,0 +1,7 @@
+hospital,department,quarter,patients,cost
+StMary,Cardiology,Q1,120,45000
+StMary,Neurology,Q1,85,38000
+General,Cardiology,Q1,95,39000
+General,Orthopedics,Q2,140,60000
+StMary,Orthopedics,Q2,110,48000
+Regional,Neurology,Q2,70,30000

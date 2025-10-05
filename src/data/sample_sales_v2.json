@@ -1,0 +1,10 @@
+{
+  "records": [
+    { "name": "Laptop", "location": "North", "month": "January", "revenue": 4000, "sold": 13 },
+    { "name": "Laptop", "location": "North", "month": "February", "revenue": 4200, "sold": 14 },
+    { "name": "Laptop", "location": "South", "month": "March", "revenue": 3800, "sold": 13 },
+    { "name": "Phone", "location": "North", "month": "January", "revenue": 20000, "sold": 100 },
+    { "name": "Phone", "location": "South", "month": "April", "revenue": 19000, "sold": 95 },
+    { "name": "Accessory", "location": "West", "month": "March", "revenue": 1500, "sold": 200 }
+  ]
+}

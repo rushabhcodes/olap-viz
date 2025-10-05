@@ -1,10 +1,11 @@
-import { CubeData, CubeCell, Dimension, SliceParams, DiceParams, DrillParams, PivotParams, DimensionMapping } from '../types/olap';
+import { CubeData, CubeCell, Dimension, SliceParams, DiceParams, DimensionMapping } from '../types/olap';
 
 export function getDimensions(data: CubeData): {
   products: Dimension;
   regions: Dimension;
   quarters: Dimension;
 } {
+  // assume canonical keys exist (product/region/quarter) after normalization
   const products = Array.from(new Set(data.records.map(r => r.product))).sort();
   const regions = Array.from(new Set(data.records.map(r => r.region))).sort();
   const quarters = Array.from(new Set(data.records.map(r => r.quarter))).sort();
@@ -29,8 +30,8 @@ export function generateCubeCells(data: CubeData): CubeCell[] {
       x,
       y,
       z,
-      value: record.sales,
-      label: `${record.product} - ${record.region} - ${record.quarter}: $${record.sales}`,
+      value: Number(record.sales) || 0,
+      label: `${record.product} - ${record.region} - ${record.quarter}: ${record.sales}`,
       product: record.product,
       region: record.region,
       quarter: record.quarter
@@ -129,36 +130,77 @@ export function drillUp(data: CubeData, dimension: 'product' | 'region' | 'quart
 }
 
 export function pivotData(data: CubeData, mapping: DimensionMapping): CubeData {
+  // For now pivot is a no-op at data level; mapping is handled in the rendering layer.
+  // Use mapping.measure to avoid unused param lint warnings.
+  const _m = mapping.measure ?? 'sales';
+  void _m;
   return data;
 }
 
 export function generateCubeCellsWithMapping(data: CubeData, mapping: DimensionMapping): CubeCell[] {
-  const dimensions = {
-    [mapping.x]: Array.from(new Set(data.records.map(r => r[mapping.x]))).sort(),
-    [mapping.y]: Array.from(new Set(data.records.map(r => r[mapping.y]))).sort(),
-    [mapping.z]: Array.from(new Set(data.records.map(r => r[mapping.z]))).sort()
-  };
+  let dimX = Array.from(new Set(data.records.map(r => String(r[mapping.x] ?? '')))).sort();
+  let dimY = Array.from(new Set(data.records.map(r => String(r[mapping.y] ?? '')))).sort();
+  let dimZ = Array.from(new Set(data.records.map(r => String(r[mapping.z] ?? '')))).sort();
+
+  // If mapping keys are missing or produce only empty values, fallback to canonical fields
+  const onlyEmpty = (arr: string[]) => arr.length === 0 || (arr.length === 1 && arr[0] === '');
+  if (onlyEmpty(dimX)) {
+    dimX = Array.from(new Set(data.records.map(r => String(r.product ?? '')))).sort();
+  }
+  if (onlyEmpty(dimY)) {
+    dimY = Array.from(new Set(data.records.map(r => String(r.region ?? '')))).sort();
+  }
+  if (onlyEmpty(dimZ)) {
+    dimZ = Array.from(new Set(data.records.map(r => String(r.quarter ?? '')))).sort();
+  }
 
   const cells: CubeCell[] = [];
 
   data.records.forEach(record => {
-    const x = dimensions[mapping.x].indexOf(record[mapping.x]);
-    const y = dimensions[mapping.y].indexOf(record[mapping.y]);
-    const z = dimensions[mapping.z].indexOf(record[mapping.z]);
+  const rawX = record[mapping.x] ?? record.product;
+  const rawY = record[mapping.y] ?? record.region;
+  const rawZ = record[mapping.z] ?? record.quarter;
+  const x = dimX.indexOf(String(rawX ?? ''));
+  const y = dimY.indexOf(String(rawY ?? ''));
+  const z = dimZ.indexOf(String(rawZ ?? ''));
+  const val = Number(record[mapping.measure ?? 'sales'] ?? record.sales) || 0;
 
     cells.push({
       x,
       y,
       z,
-      value: record.sales,
-      label: `${record[mapping.x]} - ${record[mapping.y]} - ${record[mapping.z]}: $${record.sales}`,
-      product: record.product,
-      region: record.region,
-      quarter: record.quarter
+      value: val,
+      label: `${record[mapping.x]} - ${record[mapping.y]} - ${record[mapping.z]}: ${val}`,
+      product: String(rawX ?? ''),
+      region: String(rawY ?? ''),
+      quarter: String(rawZ ?? '')
     });
   });
 
   return cells;
+}
+
+export function getDimensionsForMapping(data: CubeData, mapping: DimensionMapping) {
+  let dimX = Array.from(new Set(data.records.map(r => String(r[mapping.x] ?? '')))).sort();
+  let dimY = Array.from(new Set(data.records.map(r => String(r[mapping.y] ?? '')))).sort();
+  let dimZ = Array.from(new Set(data.records.map(r => String(r[mapping.z] ?? '')))).sort();
+
+  const onlyEmpty = (arr: string[]) => arr.length === 0 || (arr.length === 1 && arr[0] === '');
+  if (onlyEmpty(dimX)) {
+    dimX = Array.from(new Set(data.records.map(r => String(r.product ?? '')))).sort();
+  }
+  if (onlyEmpty(dimY)) {
+    dimY = Array.from(new Set(data.records.map(r => String(r.region ?? '')))).sort();
+  }
+  if (onlyEmpty(dimZ)) {
+    dimZ = Array.from(new Set(data.records.map(r => String(r.quarter ?? '')))).sort();
+  }
+
+  return {
+    x: { name: mapping.x, values: dimX },
+    y: { name: mapping.y, values: dimY },
+    z: { name: mapping.z, values: dimZ }
+  };
 }
 
 export function exportToCSV(data: CubeData): string {
@@ -204,4 +246,47 @@ export function parseCSV(csvText: string): CubeData | null {
   } catch (error) {
     return null;
   }
+}
+
+function guessColumnByNames(keys: string[], candidates: string[]) {
+  const lower = keys.map(k => k.toLowerCase());
+  for (const c of candidates) {
+    const idx = lower.indexOf(c.toLowerCase());
+    if (idx !== -1) return keys[idx];
+  }
+  return null;
+}
+
+export function normalizeToOLAP(data: CubeData): { data: CubeData; mapping: { product: string; region: string; quarter: string; measure: string } } {
+  const records = data.records || [];
+  const allKeys = Array.from(new Set(records.flatMap(r => Object.keys(r))));
+
+  // heuristics for common column names
+  const productKey = guessColumnByNames(allKeys, ['product', 'item', 'name', 'sku']) || allKeys.find(k => typeof records[0]?.[k] === 'string') || allKeys[0] || 'product';
+  const regionKey = guessColumnByNames(allKeys, ['region', 'country', 'state', 'area', 'location']) || allKeys.find(k => k !== productKey && typeof records[0]?.[k] === 'string') || allKeys[1] || 'region';
+  const quarterKey = guessColumnByNames(allKeys, ['quarter', 'period', 'qtr', 'date', 'time', 'month']) || allKeys.find(k => k !== productKey && k !== regionKey && typeof records[0]?.[k] === 'string') || allKeys[2] || 'quarter';
+
+  // find numeric measure (prefer sales/revenue/amount/units)
+  const measureKey = guessColumnByNames(allKeys, ['sales', 'revenue', 'amount', 'value', 'units']) || allKeys.find(k => records.some(r => typeof r[k] === 'number')) || allKeys.find(k => records.some(r => !isNaN(parseFloat(String(r[k]))))) || 'sales';
+
+  const normalized = records.map(rec => {
+    const prod = rec[productKey] != null ? String(rec[productKey]) : '';
+    const reg = rec[regionKey] != null ? String(rec[regionKey]) : '';
+    const qtr = rec[quarterKey] != null ? String(rec[quarterKey]) : '';
+    const measureVal = rec[measureKey] != null ? Number(rec[measureKey]) : parseFloat(String(rec[measureKey])) || 0;
+
+    return {
+      product: prod,
+      region: reg,
+      quarter: qtr,
+      sales: Number(isNaN(measureVal) ? 0 : measureVal),
+      // keep original fields too
+      ...rec
+    };
+  });
+
+  return {
+    data: { records: normalized },
+    mapping: { product: productKey, region: regionKey, quarter: quarterKey, measure: measureKey }
+  };
 }

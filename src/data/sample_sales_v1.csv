@@ -1,0 +1,7 @@
+product,region,quarter,sales,units
+Laptop,North,Q1,4000,13
+Laptop,North,Q2,15000,50
+Phone,North,Q1,20000,100
+Phone,South,Q2,19000,95
+Tablet,South,Q1,7000,45
+Tablet,North,Q2,9000,55
