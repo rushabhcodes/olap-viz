@@ -12,7 +12,7 @@ import { DimensionSelector } from '@/components/dimension-selector';
 import { OLAPOperations } from '@/components/olap-operations';
 import { DataPoint, OLAPCube, CubeCell, AxisAssignment, OLAPOperation, DataVisualizationState } from '@/lib/types';
 import { createOLAPCube } from '@/lib/olap-utils';
-import { AlertCircle, Database, Box, Table, Settings } from 'lucide-react';
+import { AlertCircle, Database, Box, Table } from 'lucide-react';
 
 export default function Home() {
   const [data, setData] = useState<DataPoint[]>([]);
@@ -69,7 +69,10 @@ export default function Home() {
     setVisualizationState(prev => ({
       ...prev,
       cube: newCube,
-      currentOperation: operation
+      currentOperation: operation,
+      axisAssignment: operation.type === 'pivot' && operation.newAxisAssignment
+        ? operation.newAxisAssignment
+        : prev.axisAssignment
     }));
   }, []);
 
@@ -85,11 +88,6 @@ export default function Home() {
           <p className="text-xl text-muted-foreground">
             Interactive multidimensional data analysis for educators
           </p>
-          <div className="flex justify-center gap-2">
-            <Badge variant="secondary">3D Visualization</Badge>
-            <Badge variant="secondary">OLAP Operations</Badge>
-            <Badge variant="secondary">Educational Tool</Badge>
-          </div>
         </div>
 
         {/* Error Display */}
@@ -122,7 +120,7 @@ export default function Home() {
                     <h4 className="font-medium mb-2">🎯 What is OLAP?</h4>
                     <p className="text-sm text-muted-foreground">
                       OLAP enables fast analysis of multidimensional data from multiple perspectives. 
-                      Think of it as a "data cube" you can slice, dice, and rotate.
+                      Think of it as a &quot;data cube&quot; you can slice, dice, and rotate.
                     </p>
                   </div>
                   <div className="bg-green-50 p-4 rounded-lg">
@@ -254,6 +252,8 @@ export default function Home() {
               <div className="grid grid-cols-1 gap-6">
                 <OLAPOperations
                   cube={visualizationState.cube}
+                  axisAssignment={visualizationState.axisAssignment}
+                  onAxisAssignmentChange={handleAxisAssignmentChange}
                   onOperation={handleOperation}
                 />
               </div>

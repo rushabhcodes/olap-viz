@@ -209,7 +209,47 @@ export function pivotCube(
   newAxisAssignment: AxisAssignment
 ): OLAPCube {
   console.log('Pivoting cube with new axis assignment:', newAxisAssignment);
-  return cube;
+
+  if (!cube) return cube;
+
+  const axes = [newAxisAssignment.x, newAxisAssignment.y, newAxisAssignment.z].filter(
+    (d): d is string => typeof d === 'string' && d !== null
+  );
+
+  if (axes.length === 0) {
+    // nothing to pivot to
+    return cube;
+  }
+
+  // choose measure
+  const measureName = newAxisAssignment.measure || cube.measures[0]?.name || null;
+  if (!measureName) return cube;
+
+  // Aggregate data by the selected axes using sum (common pivot behavior)
+  const aggregated = aggregateData(cube.data, axes, measureName, 'sum');
+
+  // Build new dimensions in the order of axes
+  const newDimensions: Dimension[] = axes.map(axisName => {
+    const existing = cube.dimensions.find(d => d.name === axisName);
+    const uniqueValues = Array.from(new Set(aggregated.map(a => a.coordinates[axisName])));
+    return existing
+      ? { ...existing, uniqueValues }
+      : { name: String(axisName), type: 'categorical', values: uniqueValues, uniqueValues };
+  });
+
+  // Build new measure (sum)
+  const total = sumBy(aggregated, c => c.measures[measureName] || 0);
+  const newMeasures = [{ name: measureName, type: 'sum' as const, value: total }];
+
+  return {
+    dimensions: newDimensions,
+    measures: newMeasures,
+    data: aggregated,
+    metadata: {
+      totalRecords: aggregated.length,
+      lastUpdated: new Date()
+    }
+  };
 }
 
 export function generateColorScale(values: number[]): string[] {

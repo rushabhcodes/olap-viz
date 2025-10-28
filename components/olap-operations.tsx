@@ -14,19 +14,22 @@ import {
   RotateCcw,
   Info
 } from 'lucide-react';
-import { OLAPCube, OLAPOperation } from '@/lib/types';
+import { OLAPCube, OLAPOperation, AxisAssignment } from '@/lib/types';
 import { sliceCube, diceCube, drillDown, drillUp, pivotCube } from '@/lib/olap-utils';
 
 interface OLAPOperationsProps {
   cube: OLAPCube | null;
+  axisAssignment: AxisAssignment;
+  onAxisAssignmentChange: (assignment: AxisAssignment) => void;
   onOperation: (operation: OLAPOperation, newCube: OLAPCube) => void;
 }
 
-export function OLAPOperations({ cube, onOperation }: OLAPOperationsProps) {
+export function OLAPOperations({ cube, axisAssignment, onAxisAssignmentChange, onOperation }: OLAPOperationsProps) {
   const [selectedOperation, setSelectedOperation] = useState<string>('slice');
   const [selectedDimension, setSelectedDimension] = useState<string>('');
   const [selectedValue, setSelectedValue] = useState<string>('');
   const [selectedDiceValues, setSelectedDiceValues] = useState<string[]>([]);
+  const [showHelp, setShowHelp] = useState<boolean>(false);
 
   if (!cube) {
     return (
@@ -83,20 +86,31 @@ export function OLAPOperations({ cube, onOperation }: OLAPOperationsProps) {
   };
 
   const handlePivot = () => {
-    const newCube = pivotCube(cube, {
-      x: cube.dimensions[0]?.name || null,
-      y: cube.dimensions[1]?.name || null,
-      z: cube.dimensions[2]?.name || null,
-      measure: cube.measures[0]?.name || null
-    });
+    // determine current assignment (prefer provided axisAssignment, fallback to cube dims)
+    const current = axisAssignment && (axisAssignment.x || axisAssignment.y || axisAssignment.z || axisAssignment.measure)
+      ? axisAssignment
+      : {
+        x: cube?.dimensions[0]?.name || null,
+        y: cube?.dimensions[1]?.name || null,
+        z: cube?.dimensions[2]?.name || null,
+        measure: cube?.measures[0]?.name || null
+      };
+
+    // rotate axes: x -> y, y -> z, z -> x
+    const rotated: AxisAssignment = {
+      x: current.y,
+      y: current.z,
+      z: current.x,
+      measure: current.measure
+    };
+
+    const newCube = pivotCube(cube!, rotated);
+
+    // notify parent about axis change and operation
+    onAxisAssignmentChange(rotated);
     onOperation({
       type: 'pivot',
-      newAxisAssignment: {
-        x: cube.dimensions[0]?.name || null,
-        y: cube.dimensions[1]?.name || null,
-        z: cube.dimensions[2]?.name || null,
-        measure: cube.measures[0]?.name || null
-      }
+      newAxisAssignment: rotated
     }, newCube);
   };
 
@@ -153,72 +167,76 @@ export function OLAPOperations({ cube, onOperation }: OLAPOperationsProps) {
           Perform standard OLAP operations to analyze your multidimensional data
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4 py-4">
         {/* Operation Selection */}
         <div className="space-y-4">
-          <h4 className="font-medium">Select Operation</h4>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="flex items-center justify-start gap-2">
             {operationButtons.map((operation) => {
               const Icon = operation.icon;
               return (
                 <Button
                   key={operation.id}
-                  variant={selectedOperation === operation.id ? "default" : "outline"}
-                  className={`h-auto p-3 flex flex-col items-center gap-2 ${
-                    selectedOperation === operation.id ? operation.color : ''
-                  }`}
+                  variant={selectedOperation === operation.id ? "default" : "ghost"}
+                  className={`h-8 w-8 p-1 flex items-center justify-center ${selectedOperation === operation.id ? operation.color : ''}`}
                   onClick={() => setSelectedOperation(operation.id)}
+                  title={operation.label}
                 >
-                  <Icon className="h-5 w-5" />
-                  <span className="text-xs">{operation.label}</span>
+                  <Icon className="h-4 w-4" />
+                  <span className="sr-only">{operation.label}</span>
                 </Button>
               );
             })}
+
+            {/* compact label for selected operation */}
+            <div className="ml-2 text-sm font-medium">
+              {operationButtons.find(op => op.id === selectedOperation)?.label}
+            </div>
+
+            <div className="ml-auto flex items-center gap-2">
+              <Button variant="ghost" className="h-7 w-7 p-0.5" onClick={() => setShowHelp(s => !s)} title="Toggle help">
+                <Info className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
-        <Separator />
-
-        {/* Operation Configuration */}
-        <div className="space-y-4">
-          <h4 className="font-medium">Configure Operation</h4>
-          
-          {currentOperation && (
-            <div className="bg-muted p-4 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <currentOperation.icon className="h-4 w-4" />
-                <span className="font-medium">{currentOperation.label}</span>
-                <Badge variant="outline" className="text-xs">
-                  {currentOperation.description}
-                </Badge>
-              </div>
+        {showHelp && (
+          <div className="text-xs text-muted-foreground bg-blue-50 p-2 rounded-lg mb-2">
+            <div className="flex items-center gap-2 mb-1">
+              <Info className="h-3 w-3" />
+              <span className="font-medium">OLAP Operations</span>
             </div>
-          )}
+            <div className="ml-4">
+              <div>• Slice: select single value</div>
+              <div>• Dice: select multiple values</div>
+              <div>• Drill Down / Up: navigate levels</div>
+              <div>• Pivot: reorient dimensions</div>
+            </div>
+          </div>
+        )}
 
-          {/* Dimension Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Dimension</label>
+        {/* Compact Operation Configuration */}
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0">
             <Select value={selectedDimension} onValueChange={setSelectedDimension}>
               <SelectTrigger>
-                <SelectValue placeholder="Select dimension" />
+                <SelectValue placeholder="Dimension" />
               </SelectTrigger>
               <SelectContent>
                 {cube.dimensions.map((dim) => (
                   <SelectItem key={dim.name} value={dim.name}>
-                    {dim.name} ({dim.uniqueValues.length} values)
+                    {dim.name} ({dim.uniqueValues.length})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Value Selection for Slice */}
           {selectedOperation === 'slice' && selectedDimension && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Value</label>
+            <div className="w-40">
               <Select value={selectedValue} onValueChange={setSelectedValue}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select value" />
+                  <SelectValue placeholder="Value" />
                 </SelectTrigger>
                 <SelectContent>
                   {cube.dimensions
@@ -233,35 +251,30 @@ export function OLAPOperations({ cube, onOperation }: OLAPOperationsProps) {
             </div>
           )}
 
-          {/* Value Selection for Dice */}
           {selectedOperation === 'dice' && selectedDimension && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Values (select multiple)</label>
-              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-                {cube.dimensions
-                  .find(d => d.name === selectedDimension)
-                  ?.uniqueValues.map((value) => (
-                    <Badge
-                      key={String(value)}
-                      variant={selectedDiceValues.includes(String(value)) ? "default" : "outline"}
-                      className="cursor-pointer"
-                      onClick={() => {
-                        const valueStr = String(value);
-                        setSelectedDiceValues(prev =>
-                          prev.includes(valueStr)
-                            ? prev.filter(v => v !== valueStr)
-                            : [...prev, valueStr]
-                        );
-                      }}
-                    >
-                      {String(value)}
-                    </Badge>
-                  ))}
-              </div>
+            <div className="flex-1 max-w-xs flex flex-wrap gap-2">
+              {cube.dimensions
+                .find(d => d.name === selectedDimension)
+                ?.uniqueValues.map((value) => (
+                  <Badge
+                    key={String(value)}
+                    variant={selectedDiceValues.includes(String(value)) ? "default" : "outline"}
+                    className="cursor-pointer text-xs"
+                    onClick={() => {
+                      const valueStr = String(value);
+                      setSelectedDiceValues(prev =>
+                        prev.includes(valueStr)
+                          ? prev.filter(v => v !== valueStr)
+                          : [...prev, valueStr]
+                      );
+                    }}
+                  >
+                    {String(value)}
+                  </Badge>
+                ))}
             </div>
           )}
 
-          {/* Execute Button */}
           <Button
             onClick={currentOperation?.action}
             disabled={
@@ -269,9 +282,9 @@ export function OLAPOperations({ cube, onOperation }: OLAPOperationsProps) {
               (selectedOperation === 'slice' && !selectedValue) ||
               (selectedOperation === 'dice' && selectedDiceValues.length === 0)
             }
-            className="w-full"
+            className="h-8 px-3"
           >
-            Execute {currentOperation?.label}
+            Execute
           </Button>
         </div>
 
