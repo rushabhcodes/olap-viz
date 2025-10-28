@@ -29,6 +29,7 @@ export function OLAPOperations({ cube, axisAssignment, onAxisAssignmentChange, o
   const [selectedDimension, setSelectedDimension] = useState<string>('');
   const [selectedValue, setSelectedValue] = useState<string>('');
   const [selectedDiceValues, setSelectedDiceValues] = useState<string[]>([]);
+  const [selectedDrillLevel, setSelectedDrillLevel] = useState<string>('');
   const [showHelp, setShowHelp] = useState<boolean>(false);
 
   if (!cube) {
@@ -66,22 +67,54 @@ export function OLAPOperations({ cube, axisAssignment, onAxisAssignmentChange, o
   const handleDrillDown = () => {
     if (!selectedDimension) return;
     
-    const newCube = drillDown(cube, selectedDimension, 'detailed');
+    const dim = cube.dimensions.find(d => d.name === selectedDimension);
+    if (!dim?.hierarchy) return;
+    
+    // Get current values and find next level down
+    const currentValues = [...new Set(cube.data.map(cell => cell.coordinates[selectedDimension]))];
+    const nextLevelValues = new Set<string>();
+    
+    currentValues.forEach(value => {
+      const valueStr = String(value);
+      const children = dim.hierarchy!.childMap[valueStr] || [];
+      children.forEach(child => nextLevelValues.add(child));
+    });
+    
+    if (nextLevelValues.size === 0) return;
+    
+    const newCube = drillDown(cube, selectedDimension, 'next');
     onOperation({
       type: 'drill-down',
       dimension: selectedDimension,
-      targetLevel: 'detailed'
+      targetLevel: 'next'
     }, newCube);
   };
 
   const handleDrillUp = () => {
     if (!selectedDimension) return;
     
-    const newCube = drillUp(cube, selectedDimension, 'summary');
+    const dim = cube.dimensions.find(d => d.name === selectedDimension);
+    if (!dim?.hierarchy) return;
+    
+    // Get current values and find their parents
+    const currentValues = [...new Set(cube.data.map(cell => cell.coordinates[selectedDimension]))];
+    const parentValues = new Set<string>();
+    
+    currentValues.forEach(value => {
+      const valueStr = String(value);
+      const parent = dim.hierarchy!.parentMap[valueStr];
+      if (parent) {
+        parentValues.add(parent);
+      }
+    });
+    
+    if (parentValues.size === 0) return;
+    
+    const newCube = drillUp(cube, selectedDimension, 'parent');
     onOperation({
       type: 'drill-up',
       dimension: selectedDimension,
-      sourceLevel: 'detailed'
+      sourceLevel: 'current'
     }, newCube);
   };
 
@@ -177,7 +210,9 @@ export function OLAPOperations({ cube, axisAssignment, onAxisAssignmentChange, o
                 <Button
                   key={operation.id}
                   variant={selectedOperation === operation.id ? "default" : "ghost"}
-                  className={`h-8 w-8 p-1 flex items-center justify-center ${selectedOperation === operation.id ? operation.color : ''}`}
+                  className={`h-8 w-8 p-1 flex items-center justify-center ${
+                    selectedOperation === operation.id ? operation.color : ''
+                  }`}
                   onClick={() => setSelectedOperation(operation.id)}
                   title={operation.label}
                 >
@@ -225,12 +260,80 @@ export function OLAPOperations({ cube, axisAssignment, onAxisAssignmentChange, o
               <SelectContent>
                 {cube.dimensions.map((dim) => (
                   <SelectItem key={dim.name} value={dim.name}>
-                    {dim.name} ({dim.uniqueValues.length})
+                    {dim.name} ({dim.uniqueValues.length}) {dim.hierarchy ? '📊' : ''}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {/* Show hierarchy info for drill operations */}
+          {(selectedOperation === 'drill-down' || selectedOperation === 'drill-up') && selectedDimension && (
+            <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+              {(() => {
+                const dim = cube.dimensions.find(d => d.name === selectedDimension);
+                if (!dim?.hierarchy) return 'No hierarchy';
+                
+                // Get current values in the data
+                const currentValues = [...new Set(cube.data.map(cell => cell.coordinates[selectedDimension]))];
+                
+                // Determine current level by checking the format of values
+                let currentLevel = '';
+                let currentLevelIndex = -1;
+                
+                if (selectedDimension === 'Date') {
+                  if (currentValues.some(v => String(v).match(/^\d{4}$/))) {
+                    currentLevel = 'Year';
+                    currentLevelIndex = 0;
+                  } else if (currentValues.some(v => String(v).match(/^\d{4}-\d{2}$/))) {
+                    currentLevel = 'Month';
+                    currentLevelIndex = 1;
+                  } else if (currentValues.some(v => String(v).match(/^\d{4}-\d{2}-\d{2}$/))) {
+                    currentLevel = 'Day';
+                    currentLevelIndex = 2;
+                  }
+                } else if (selectedDimension === 'Product') {
+                  // Check if we have Category data available
+                  const hasCategoryData = cube.data.some(cell => 
+                    cell.coordinates.Category && Object.keys(cell.coordinates).includes('Category')
+                  );
+                  
+                  if (hasCategoryData) {
+                    const categories = [...new Set(cube.data.map(cell => cell.coordinates.Category))];
+                    if (currentValues.some(v => categories.includes(String(v)))) {
+                      currentLevel = 'Product';
+                      currentLevelIndex = 1;
+                    } else {
+                      currentLevel = 'Category';
+                      currentLevelIndex = 0;
+                    }
+                  } else {
+                    // Fallback: assume we're at Product level if no Category data
+                    currentLevel = 'Product';
+                    currentLevelIndex = 1;
+                  }
+                }
+                
+                const levels = dim.hierarchy.levels;
+                const canDrillDown = currentLevelIndex < levels.length - 1;
+                const canDrillUp = currentLevelIndex > 0;
+                
+                return (
+                  <div className="flex items-center gap-2">
+                    <span>Current: </span>
+                    <span className="font-medium text-foreground">{currentLevel}</span>
+                    <span className="text-muted-foreground">({levels.join(' → ')})</span>
+                    {canDrillUp && (
+                      <span className="text-blue-600 font-medium">↑ Up</span>
+                    )}
+                    {canDrillDown && (
+                      <span className="text-green-600 font-medium">↓ Down</span>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {selectedOperation === 'slice' && selectedDimension && (
             <div className="w-40">

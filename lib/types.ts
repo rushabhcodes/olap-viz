@@ -7,6 +7,11 @@ export interface Dimension {
   type: 'categorical' | 'numerical' | 'temporal';
   values: (string | number)[];
   uniqueValues: (string | number)[];
+  hierarchy?: {
+    levels: string[];
+    parentMap: { [key: string]: string };
+    childMap: { [key: string]: string[] };
+  };
 }
 
 export interface Measure {
