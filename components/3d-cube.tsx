@@ -73,7 +73,6 @@ function CubeVisualization({ cube, axisAssignment, onCellClick, selectedCell }: 
 
     const values = cube.data.map(cell => cell.measures[measureName] || 0);
     const colors = generateColorScale(values);
-    const maxValue = Math.max(...values);
 
     const cells3D = cube.data.map((cell, index) => {
       const xIndex = xValues.indexOf(cell.coordinates[xDim] as string);

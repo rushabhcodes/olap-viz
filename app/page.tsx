@@ -4,7 +4,6 @@ import React, { useState, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { FileUpload } from '@/components/file-upload';
 import { Cube3D } from '@/components/3d-cube';
 import { DataTable } from '@/components/data-table';

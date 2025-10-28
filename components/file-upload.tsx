@@ -35,8 +35,9 @@ export function FileUpload({ onDataLoaded, onError }: FileUploadProps) {
           }
           setIsLoading(false);
         },
-        error: (error: any) => {
-          onError(`Failed to parse sample data: ${error.message}`);
+        error: (error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          onError(`Failed to parse sample data: ${message}`);
           setIsLoading(false);
         }
       });
